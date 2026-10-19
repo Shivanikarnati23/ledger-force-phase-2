@@ -1,0 +1,6 @@
+Why We Implemented Soft Delete for Employees
+When an employee leaves the organization, running a DELETE FROM employees operation presents severe operational and legal risks. In ledger force, we handle departures by setting an exit_date rather than executing a hard deletion for several key reasons:
+Tax & Regulatory Audit Compliance: Tax agencies mandate that payroll and withholding records remain accessible for multiple years. Deleting employee profiles destroys the context surrounding past disbursements.
+Tax Form Processing: End-of-year tax forms must be generated for every individual who earned income during the fiscal year, regardless of whether they are active at year-end.
+Financial Data Integrity: Primary key references in historic payroll entries and assignment logs depend on employee IDs. Hard deletion causes broken foreign key dependencies and compromises transaction history.
+Post-Termination Adjustments: Deferrals, severance payouts, retroactive adjustments, and benefits reconciliations frequently require accessing employee records months after their departure.

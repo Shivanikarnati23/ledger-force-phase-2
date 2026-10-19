@@ -1,43 +1,31 @@
-from pydantic import BaseModel, EmailStr
+from datetime import date
 from typing import Optional
-
-class DepartmentBase(BaseModel):
-    name: str
-
-class DepartmentCreate(DepartmentBase):
-    pass
-
-class DepartmentResponse(DepartmentBase):
-    id: int
-
-    class Config:
-        from_attributes = True
-
-class RoleBase(BaseModel):
-    title: str
-
-class RoleCreate(RoleBase):
-    pass
-
-class RoleResponse(RoleBase):
-    id: int
-
-    class Config:
-        from_attributes = True
+from pydantic import BaseModel, EmailStr, ConfigDict
 
 class EmployeeBase(BaseModel):
-    name: str
+    first_name: str
+    last_name: str
     email: EmailStr
-    department_id: Optional[int] = None
-    role_id: Optional[int] = None
+    department_id: str
+    role_id: str
+    manager_id: Optional[str] = None
+    hire_date: Optional[date] = None
 
 class EmployeeCreate(EmployeeBase):
-    pass
+    employee_id: str
+
+class EmployeeUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    department_id: Optional[str] = None
+    role_id: Optional[str] = None
+    manager_id: Optional[str] = None
+    hire_date: Optional[date] = None
+    exit_date: Optional[date] = None
 
 class EmployeeResponse(EmployeeBase):
-    id: int
-    department: Optional[DepartmentResponse] = None
-    role: Optional[RoleResponse] = None
+    employee_id: str
+    exit_date: Optional[date] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

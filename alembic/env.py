@@ -6,7 +6,7 @@ from sqlalchemy import engine_from_config, pool
 # Import your app configuration, Base, and Models
 from app.config import settings
 from app.database import Base
-from app.models.employee import Department, Role, Employee
+from app.models.employee import Employee
 
 # this is the Alembic Config object
 config = context.config

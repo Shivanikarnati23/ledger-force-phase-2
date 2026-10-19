@@ -1,32 +1,49 @@
+from datetime import date, timedelta
+from decimal import Decimal
 from sqlalchemy.orm import Session
-from app.models.employee import Department, Role, Employee
-from app.schemas.employee import DepartmentCreate, RoleCreate, EmployeeCreate
+from app.models.salary import SalaryRevision, SalaryComponent
 
-class EmployeeService:
-    @staticmethod
-    def create_department(db: Session, department: DepartmentCreate):
-        db_dept = Department(name=department.name)
-        db.add(db_dept)
-        db.commit()
-        db.refresh(db_dept)
-        return db_dept
+def get_employee_salary_structure(db: Session, employee_id: str, target_date: date):
+    """
+    Retrieves all active salary revisions for an employee on a specific effective date.
+    """
+    revisions = db.query(SalaryRevision).filter(
+        SalaryRevision.employee_id == employee_id,
+        SalaryRevision.valid_from <= target_date,
+        (SalaryRevision.valid_to == None) | (SalaryRevision.valid_to >= target_date)
+    ).all()
+    
+    return revisions
 
-    @staticmethod
-    def create_role(db: Session, role: RoleCreate):
-        db_role = Role(title=role.title)
-        db.add(db_role)
-        db.commit()
-        db.refresh(db_role)
-        return db_role
+def revise_employee_salary(db: Session, employee_id: str, component_id: str, new_amount: Decimal, valid_from: date, reason: str = None):
+    """
+    Closes the currently active salary revision for a component and creates a new revision.
+    """
+    # 1. Find the current active revision for this employee and component
+    current_revision = db.query(SalaryRevision).filter(
+        SalaryRevision.employee_id == employee_id,
+        SalaryRevision.component_id == component_id,
+        SalaryRevision.valid_to == None
+    ).first()
 
-    @staticmethod
-    def create_employee(db: Session, employee: EmployeeCreate):
-        db_emp = Employee(**employee.dict())
-        db.add(db_emp)
-        db.commit()
-        db.refresh(db_emp)
-        return db_emp
+    if current_revision:
+        # Close the previous record the day before the new one starts
+        current_revision.valid_to = valid_from - timedelta(days=1)
+        db.add(current_revision)
 
-    @staticmethod
-    def get_employees(db: Session, skip: int = 0, limit: int = 100):
-        return db.query(Employee).offset(skip).limit(limit).all()
+    # 2. Insert the new salary revision
+    new_revision_id = f"REV-{employee_id}-{component_id}-{valid_from.strftime('%Y%m%d')}"
+    new_revision = SalaryRevision(
+        revision_id=new_revision_id,
+        employee_id=employee_id,
+        component_id=component_id,
+        amount=Decimal(str(new_amount)),  # Ensure precise Decimal handling
+        valid_from=valid_from,
+        valid_to=None,  # Null indicates currently active
+        reason=reason
+    )
+    db.add(new_revision)
+    db.commit()
+    db.refresh(new_revision)
+    
+    return new_revision
