@@ -1,0 +1,1 @@
+﻿from app.database import SessionLocal; from sqlalchemy import text; s = SessionLocal(); print(s.execute(text('SELECT table_name FROM information_schema.tables WHERE table_schema=\'public\'')).fetchall())

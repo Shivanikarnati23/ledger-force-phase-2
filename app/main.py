@@ -1,10 +1,12 @@
 from fastapi import FastAPI
-from app.routers import employees
+from app.routers import employees, payroll
 
 app = FastAPI(title="Ledger Force API")
 
 # Include the employee and team management router
 app.include_router(employees.router)
+app.include_router(employees.router)
+app.include_router(payroll.router)
 
 @app.get("/")
 def read_root():
