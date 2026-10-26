@@ -7,6 +7,10 @@ from sqlalchemy import engine_from_config, pool
 from app.config import settings
 from app.database import Base
 from app.models.employee import Employee
+from app.models.attendance import Attendance
+from app.models.leave import LeaveType, LeaveBalance, LeaveRequest
+target_metadata = Base.metadata
+
 
 # this is the Alembic Config object
 config = context.config
