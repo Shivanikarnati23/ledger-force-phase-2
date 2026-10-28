@@ -24,7 +24,7 @@ class SalaryStructure(Base):
     effective_date = Column(Date, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint('employee_id', 'effective_date', name='uq_salary_structures_employee_effective'),
+       UniqueConstraint('employee_id', 'component_id', 'effective_date', name='uq_salary_structures_emp_comp_effective'),
     )
 
 

@@ -1,12 +1,12 @@
-department_id,name,code
-D01,Department 1,DEPT1
-D02,Department 2,DEPT2
-D03,Department 3,DEPT3
-D04,Department 4,DEPT4
-D05,Department 5,DEPT5
-D06,Department 6,DEPT6
-D07,Department 7,DEPT7
-D08,Department 8,DEPT8
-D09,Department 9,DEPT9
-D10,Department 10,DEPT10
-D11,Department 11,DEPT11
+department_id,department_name,cost_center,description
+D00,Executive Office,CC-000,Leadership & strategy
+D01,Engineering,CC-100,"Product engineering, QA and DevOps"
+D02,Product & Design,CC-200,Product management and UX design
+D03,Data & AI,CC-300,"Data engineering, analytics and machine learning"
+D04,Sales,CC-400,Enterprise and mid-market sales
+D05,Marketing,CC-500,"Brand, content and digital marketing"
+D06,Customer Support,CC-600,Customer success and support desk
+D07,Human Resources,CC-700,"Talent, people operations and payroll"
+D08,Finance & Accounts,CC-800,"Accounting, controls and reporting"
+D09,Operations & IT,CC-900,"Facilities, IT systems and operations"
+D10,Legal & Compliance,CC-950,"Contracts, policy and statutory compliance"

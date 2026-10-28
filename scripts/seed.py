@@ -4,6 +4,23 @@ from sqlalchemy import Date, String, text
 from app.database import engine, Base
 import app.models  # Registers all models and constraints with Base.metadata
 
+def normalize_emp_id(val):
+    if pd.isna(val):
+        return None
+    s = str(val).strip()
+    if s.lower() in ['nan', 'none', '']:
+        return None
+    if s.replace('.', '', 1).isdigit():
+        return f"EMP-{int(float(s)):04d}"
+    s_upper = s.upper()
+    if s_upper.startswith('EMP') and '-' not in s_upper:
+        num_part = ''.join(filter(str.isdigit, s_upper))
+        if num_part:
+            return f"EMP-{int(num_part):04d}"
+    if s_upper.startswith('E') and '-' not in s_upper and s_upper[1:].isdigit():
+        return f"EMP-{int(s_upper[1:]):04d}"
+    return s
+
 def run_seeder():
     print("Starting data seeding from CSV files...")
     
@@ -38,12 +55,12 @@ def run_seeder():
         df_roles.to_sql('roles', con=engine, if_exists='append', index=False)
         print(f"Seeded roles: {len(df_roles)} rows.")
 
-    # 3. Seed Employees (with strict deduplication to prevent unique primary key violations)
+    # 3. Seed Employees
     emp_path = os.path.join(data_dir, "employees.csv")
     if os.path.exists(emp_path) and os.path.getsize(emp_path) > 0:
         df_emp = pd.read_csv(emp_path)
         if 'employee_id' in df_emp.columns:
-            df_emp['employee_id'] = df_emp['employee_id'].astype(str).str.strip()
+            df_emp['employee_id'] = df_emp['employee_id'].apply(normalize_emp_id)
             df_emp = df_emp.drop_duplicates(subset=['employee_id'], keep='first').copy()
         
         for col in ['department_id', 'role_id', 'manager_id']:
@@ -80,6 +97,8 @@ def run_seeder():
         df_assign = pd.read_csv(assign_path)
         for col in df_assign.select_dtypes(include=['object', 'str']).columns:
             df_assign[col] = df_assign[col].astype(str).str.strip()
+        if 'employee_id' in df_assign.columns:
+            df_assign['employee_id'] = df_assign['employee_id'].apply(normalize_emp_id)
         if 'assignment_id' in df_assign.columns:
             df_assign = df_assign.drop_duplicates(subset=['assignment_id'], keep='first')
         else:
@@ -87,19 +106,28 @@ def run_seeder():
         df_assign.to_sql('employee_assignments', con=engine, if_exists='append', index=False)
         print(f"Seeded employee_assignments: {len(df_assign)} rows.")
 
-    # 5. Seed Salary Components (Ensure default COMP-BASIC exists even if CSV is empty)
+    # 5. Seed Salary Components
     comp_path = os.path.join(data_dir, "salary_components.csv")
     df_comp = pd.DataFrame()
     if os.path.exists(comp_path) and os.path.getsize(comp_path) > 0:
         df_comp = pd.read_csv(comp_path)
         for col in df_comp.select_dtypes(include=['object', 'str']).columns:
             df_comp[col] = df_comp[col].astype(str).str.strip()
+            
+        if 'component_name' in df_comp.columns and 'name' not in df_comp.columns:
+            df_comp = df_comp.rename(columns={'component_name': 'name'})
+        if 'component_type' in df_comp.columns and 'type' not in df_comp.columns:
+            df_comp = df_comp.rename(columns={'component_type': 'type'})
+            
         if 'component_id' in df_comp.columns:
             df_comp = df_comp.drop_duplicates(subset=['component_id'], keep='first')
             
     if df_comp.empty or 'COMP-BASIC' not in df_comp.get('component_id', pd.Series()).values:
         default_comp = pd.DataFrame([{'component_id': 'COMP-BASIC', 'name': 'Basic Salary', 'type': 'Earning', 'description': 'Standard Basic Salary'}])
         df_comp = pd.concat([df_comp, default_comp], ignore_index=True)
+
+    valid_comp_cols = ['component_id', 'name', 'type', 'description']
+    df_comp = df_comp[[c for c in valid_comp_cols if c in df_comp.columns]]
 
     df_comp.to_sql('salary_components', con=engine, if_exists='append', index=False)
     print(f"Seeded salary_components: {len(df_comp)} rows.")
@@ -111,52 +139,66 @@ def run_seeder():
         for col in df_rev.select_dtypes(include=['object', 'str']).columns:
             df_rev[col] = df_rev[col].astype(str).str.strip()
         
-        if 'id' in df_rev.columns and 'revision_id' not in df_rev.columns:
-            df_rev = df_rev.rename(columns={'id': 'revision_id'})
-        if 'salary' in df_rev.columns and 'amount' not in df_rev.columns:
+        if 'new_annual_fixed' in df_rev.columns:
+            df_rev = df_rev.rename(columns={'new_annual_fixed': 'amount'})
+        elif 'salary' in df_rev.columns:
             df_rev = df_rev.rename(columns={'salary': 'amount'})
-        if 'effective_date' in df_rev.columns and 'valid_from' not in df_rev.columns:
+            
+        if 'effective_from' in df_rev.columns:
+            df_rev = df_rev.rename(columns={'effective_from': 'valid_from'})
+        elif 'effective_date' in df_rev.columns:
             df_rev = df_rev.rename(columns={'effective_date': 'valid_from'})
             
+        if 'revision_reason' in df_rev.columns:
+            df_rev = df_rev.rename(columns={'revision_reason': 'reason'})
+
         if 'component_id' not in df_rev.columns:
             df_rev['component_id'] = 'COMP-BASIC'
 
         if 'employee_id' in df_rev.columns:
-            df_rev['employee_id'] = df_rev['employee_id'].apply(
-                lambda x: f"E{int(float(x)):04d}" if str(x).replace('.', '', 1).isdigit() else str(x)
-            )
+            df_rev['employee_id'] = df_rev['employee_id'].apply(normalize_emp_id)
 
         if 'revision_id' in df_rev.columns:
             df_rev = df_rev.drop_duplicates(subset=['revision_id'], keep='first')
+            
+        if {'employee_id', 'component_id', 'valid_from'}.issubset(df_rev.columns):
+            df_rev = df_rev.drop_duplicates(subset=['employee_id', 'component_id', 'valid_from'], keep='first')
+
+        valid_rev_cols = ['revision_id', 'employee_id', 'component_id', 'amount', 'valid_from', 'valid_to', 'reason']
+        df_rev = df_rev[[c for c in valid_rev_cols if c in df_rev.columns]]
+
         df_rev.to_sql('salary_revisions', con=engine, if_exists='append', index=False)
         print(f"Seeded salary_revisions: {len(df_rev)} rows.")
     else:
         print("Skipped salary_revisions.csv: file is empty.")
-# 7. Seed Salary Structures
+
+    # 7. Seed Salary Structures
     struct_path = os.path.join(data_dir, "salary_structures.csv")
     if os.path.exists(struct_path) and os.path.getsize(struct_path) > 0:
         df_struct = pd.read_csv(struct_path)
         for col in df_struct.select_dtypes(include=['object', 'str']).columns:
             df_struct[col] = df_struct[col].astype(str).str.strip()
             
-        if 'id' in df_struct.columns and 'structure_id' not in df_struct.columns:
-            df_struct = df_struct.rename(columns={'id': 'structure_id'})
-        if 'amount' in df_struct.columns and 'base_salary' not in df_struct.columns:
+        if 'monthly_amount' in df_struct.columns:
+            df_struct = df_struct.rename(columns={'monthly_amount': 'base_salary'})
+        elif 'amount' in df_struct.columns:
             df_struct = df_struct.rename(columns={'amount': 'base_salary'})
+
+        if 'effective_from' in df_struct.columns:
+            df_struct = df_struct.rename(columns={'effective_from': 'effective_date'})
+        elif 'effective_date' not in df_struct.columns and 'date' in df_struct.columns:
+            df_struct = df_struct.rename(columns={'date': 'effective_date'})
             
         if 'structure_id' in df_struct.columns:
             df_struct['structure_id'] = df_struct['structure_id'].apply(
-                lambda x: f"STR-{int(float(x)):03d}" if str(x).replace('.', '', 1).isdigit() else str(x)
+                lambda x: f"SS-{int(float(x)):06d}" if str(x).replace('.', '', 1).isdigit() else str(x)
             )
         else:
-            df_struct['structure_id'] = [f"STR-{i+1:03d}" for i in range(len(df_struct))]
+            df_struct['structure_id'] = [f"SS-{i+1:06d}" for i in range(len(df_struct))]
 
         if 'employee_id' in df_struct.columns:
-            df_struct['employee_id'] = df_struct['employee_id'].apply(
-                lambda x: f"E{int(float(x)):04d}" if str(x).replace('.', '', 1).isdigit() else str(x)
-            )
+            df_struct['employee_id'] = df_struct['employee_id'].apply(normalize_emp_id)
             
-        # Map or assign default component_id if numeric or missing
         if 'component_id' in df_struct.columns:
             df_struct['component_id'] = df_struct['component_id'].apply(
                 lambda x: 'COMP-BASIC' if str(x).isdigit() or str(x) in ['nan', 'None', ''] else str(x)
@@ -168,6 +210,13 @@ def run_seeder():
             df_struct['effective_date'] = '2026-01-01'
 
         df_struct = df_struct.drop_duplicates(subset=['structure_id'], keep='first')
+
+        if {'employee_id', 'component_id', 'effective_date'}.issubset(df_struct.columns):
+            df_struct = df_struct.drop_duplicates(subset=['employee_id', 'component_id', 'effective_date'], keep='first')
+
+        valid_struct_cols = ['structure_id', 'employee_id', 'component_id', 'base_salary', 'effective_date']
+        df_struct = df_struct[[c for c in valid_struct_cols if c in df_struct.columns]]
+
         df_struct.to_sql('salary_structures', con=engine, if_exists='append', index=False)
         print(f"Seeded salary_structures: {len(df_struct)} rows.")
     else:
